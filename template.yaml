@@ -1,0 +1,191 @@
+alias: provision-is
+description: Provision two simple IS instance including TNServer and JDBC adapter
+
+environments:
+  default:                                  # defaults
+    spm.secure:          false              # Use HTTPS connection to SPM: true,false
+    spm.memory.init:     512                # minimal memory
+    spm.memory.max:      512                # minimal memory
+    spm.fixes:           [wMFix.SPM]
+    spm.configure:       [spm-tuneup]
+
+
+    is.host:            ${}
+    is.instance.name:   ${}                 # is instance
+    is.primary.port:    ${}
+    is.diagnostic.port: ${}
+    is.jmx.port:        ${}
+    is.instance.name2:   ${}                 # is instance
+    is.primary.port2:    ${}
+    is.diagnostic.port2: ${}
+    is.jmx.port2:        ${}
+    is.instance.name3:   ${}                 # is instance
+    is.primary.port3:    ${}
+    is.diagnostic.port3: ${}
+    is.jmx.port3:        ${}
+    is.install.service: false
+    is.memory.init:     512                # memory configuration
+    is.memory.max:      512                # memory configuration
+    is.lb.protocol:     HTTP                # external load balancer protocol
+    is.fixes:           [wMFix.integrationServer.Core,wMFix.jdbcAdapter]
+    is.configure:       [is-server, is-files]
+
+  server:
+    is.host:             ${is.host}
+
+#########################################################################################################
+# Layers - groups of identically setup nodes to perform specific role
+# within this environment
+#########################################################################################################
+
+layers:
+  default:                                  # default configuration for all layers
+    productRepo: ${repo.product}
+    fixRepo:     ${repo.fix}
+
+  spm:
+    description: Management Agent Layer using Platform Manager
+    templates:   ${spm.configure}
+
+  is:
+    description: Business Process Management layer based on Integration Server
+    templates:   ${is.configure}
+
+# Inline templates - customized product list, fix list, runtime instances, files and configuration
+templates:
+# Platform Manager
+  spm-tuneup:
+    description: SPM fixes and configuration
+    fixes: ${spm.fixes}
+    products:
+      SPM:
+        default:                            # default instance
+          runtimeComponentId: OSGI-SPM
+          configuration:
+            OSGI-SPM:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${spm.memory.init}
+                  MaxSize: ${spm.memory.max}
+      ISspm:
+      
+  is-server: # Custom IS is setup
+    description: is layer can be single server or a cluster
+    licenses:
+      "IntegrationServer/config/licenseKey.xml": ${is.license.key.alias}
+    fixes: ${is.fixes}
+    products:
+      jdbcAdapter:
+      TNServer:
+      integrationServer: # the core IS product that owns the instance
+        ${is.instance.name}:
+          primary.port: ${is.primary.port}
+          diagnostic.port: ${is.diagnostic.port}
+          jmx.port: ${is.jmx.port}
+          license.file: IntegrationServer/config/licenseKey.xml
+          install.service: false
+          package.list: WmJDBCAdapter,WmTN
+          configuration:
+            OSGI-IS_${instance.name}:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${is.memory.init}
+                  MaxSize:  ${is.memory.max}
+            integrationServer-${instance.name}:
+              COMMON-JDBC:
+                COMMON-JDBC-SL1aTN:
+                  Pool:
+                    '@alias': SL1aTN
+                    Name: SL1aTN
+                    Description: 'TN connection'
+                    MinSize: '0'
+                    MaxSize: '10'
+                    MaxIdleTime: '60000'
+                    DatabaseServer:
+                      '@type': ORACLE
+                      URL: jdbc:wm:oracle://localhost:1521;SID=XE
+                      User: Administrator
+                      Password: manage
+                    ExtendedProperties:
+                      Property:
+                      - '@name': AvailConnWarningThreshold
+                        $: '0'
+                      - '@name': WaitingThreadThresholdCount
+                        $: '0'
+              COMMON-DBFUNCTION:
+                COMMON-DBFUNCTION-TN:
+                  Function:
+                    '@alias': TN
+                    Description: Trading Networks Function
+                    PoolAlias: SL1aTN
+
+        ${is.instance.name2}:
+          primary.port: ${is.primary.port2}
+          diagnostic.port: ${is.diagnostic.port2}
+          jmx.port: ${is.jmx.port2}
+          license.file: IntegrationServer/config/licenseKey.xml
+          install.service: false
+          package.list: WmJDBCAdapter,WmTN
+          configuration:
+            OSGI-IS_${instance.name2}:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${is.memory.init}
+                  MaxSize:  ${is.memory.max}
+
+        ${is.instance.name3}:
+          primary.port: ${is.primary.port3}
+          diagnostic.port: ${is.diagnostic.port3}
+          jmx.port: ${is.jmx.port3}
+          license.file: IntegrationServer/config/licenseKey.xml
+          install.service: false
+          package.list: WmJDBCAdapter,WmTN
+          configuration:
+            OSGI-IS_${instance.name3}:
+              COMMON-MEMORY:
+                COMMON-MEMORY:
+                  InitSize: ${is.memory.init}
+                  MaxSize:  ${is.memory.max}
+
+  is-files: 
+    description: IS related files
+    products:
+      WmSAP:    # this is just a placeholder ...
+      jdbcAdapter:
+        files:
+#          IntegrationServer/packages/WmJDBCAdapter/code/jars: "abc.txt"
+
+      
+
+# Migration Section
+#migration:
+#  options:
+#    snapshot:
+#     execute: false
+#    shutdown:
+#     execute: true
+#    rename:
+#     execute: false
+
+#########################################################################################################
+# Provisioning map of layers to nodes for each environment type
+#########################################################################################################
+provision:
+  server:
+    spm:   ["${is.host}"]
+    is:    ["${is.host}"]
+
+nodes:
+  default:
+    default:
+      port: ${spm.port}
+      secure: ${spm.secure}
+      bootstrapInfo:
+        installDir: ${install.dir}
+        repoName: ${repo.product}
+        platform: ${os.platform}
+        credentials:
+          userName:   ${os.username}
+          password:   ${os.password}
+          authenticationMethod: ${os.auth.method}
+          privateKey: ${os.auth.key}
